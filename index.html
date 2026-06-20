@@ -1,19 +1,29 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        body { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; background: #222; color: #fff; font-family: sans-serif; }
-        canvas { border: 2px solid #fff; background: #000; }
-        #stats { margin-top: 10px; font-size: 14px; }
+        body { display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 100vh; background: #222; color: #fff; font-family: sans-serif; margin: 0; padding: 10px; }
+        canvas { border: 2px solid #fff; background: #000; max-width: 100%; height: auto; }
+        #stats { margin: 10px 0; font-size: 14px; }
+        .controls { display: grid; grid-template-columns: repeat(3, 60px); gap: 10px; margin-top: 10px; }
+        button { width: 60px; height: 60px; font-size: 20px; background: #444; color: white; border: none; border-radius: 8px; }
+        #btn-auto { grid-column: span 3; width: 100%; height: 50px; }
+        button:active { background: #666; }
     </style>
 </head>
 <body>
-<canvas id="game" width="600" height="600"></canvas>
+<canvas id="game" width="400" height="400"></canvas>
 <div id="stats"></div>
+<div class="controls">
+    <div></div><button onclick="handleDir(0,-1)">↑</button><div></div>
+    <button onclick="handleDir(-1,0)">←</button><button onclick="handleDir(0,1)">↓</button><button onclick="handleDir(1,0)">→</button>
+    <button id="btn-auto" onclick="toggleAuto()">AUTO PLAY</button>
+</div>
 <script>
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
-    const size = 15;
+    const size = 10; // スマホで見やすいように少し調整
     const cols = 40, rows = 40;
     let player = { x: 20, y: 20 };
     let grid = Array(cols).fill().map(() => Array(rows).fill(null).map(() => ({ color: '#000', life: 0 })));
@@ -22,68 +32,38 @@
     let minBlackRatio = 1.0;
 
     function updateStats() {
-        let total = cols * rows;
-        let blackCount = 0;
-        let colors = {};
-        grid.forEach(col => col.forEach(cell => {
-            if (cell.color === '#000') blackCount++;
-            else colors[cell.color] = (colors[cell.color] || 0) + 1;
-        }));
-        
+        let total = cols * rows, blackCount = 0;
+        grid.forEach(col => col.forEach(cell => { if (cell.color === '#000') blackCount++; }));
         let blackRatio = blackCount / total;
         if (blackRatio < minBlackRatio) minBlackRatio = blackRatio;
-
-        let statDiv = document.getElementById('stats');
-        statDiv.innerHTML = `黒の占有率: ${(blackRatio*100).toFixed(1)}% | 最小黒率: ${(minBlackRatio*100).toFixed(1)}% | オートプレイ: ${autoPlay ? 'ON' : 'OFF'}`;
+        document.getElementById('stats').innerHTML = `黒率: ${(blackRatio*100).toFixed(1)}% | 最小: ${(minBlackRatio*100).toFixed(1)}%`;
     }
 
     function draw() {
-        ctx.clearRect(0, 0, 600, 600);
-        for(let x=0; x<cols; x++) {
-            for(let y=0; y<rows; y++) {
-                ctx.fillStyle = grid[x][y].color;
-                ctx.fillRect(x*size, y*size, size-1, size-1);
-            }
+        ctx.clearRect(0, 0, 400, 400);
+        for(let x=0; x<cols; x++) for(let y=0; y<rows; y++) {
+            ctx.fillStyle = grid[x][y].color;
+            ctx.fillRect(x*size, y*size, size-1, size-1);
         }
-        const offset = 2;
         ctx.fillStyle = 'red';
-        ctx.fillRect(player.x*size + offset, player.y*size + offset, size-1 - offset*2, size-1 - offset*2);
-
-        if (isGameOver) {
-            ctx.fillStyle = 'white'; ctx.font = '48px Arial';
-            ctx.fillText('CLEAR!', 210, 300);
-        }
+        ctx.fillRect(player.x*size+1, player.y*size+1, size-3, size-3);
     }
 
     function step() {
         if (isGameOver) return;
-        
-        // オートプレイ時はランダム移動
-        if (autoPlay) {
-            let moves = [[0,1],[0,-1],[1,0],[-1,0]];
-            let [dx, dy] = moves[Math.floor(Math.random()*moves.length)];
-            player.x = Math.max(0, Math.min(cols-1, player.x + dx));
-            player.y = Math.max(0, Math.min(rows-1, player.y + dy));
-        }
-
         grid[player.x][player.y].color = `hsl(${Math.random() * 360}, 70%, 50%)`;
         grid[player.x][player.y].life = 5;
-
-        // Spread処理
         let newGrid = grid.map(col => col.map(cell => ({ ...cell })));
-        for(let x=0; x<cols; x++) {
-            for(let y=0; y<rows; y++) {
-                if (grid[x][y].life > 0) {
-                    const neighbors = [[0,1], [0,-1], [1,0], [-1,0]];
-                    const [dx, dy] = neighbors[Math.floor(Math.random() * neighbors.length)];
-                    let tx = x + dx, ty = y + dy;
-                    if (tx >= 0 && tx < cols && ty >= 0 && ty < rows && newGrid[tx][ty].life === 0) {
-                        newGrid[tx][ty].color = grid[x][y].color;
-                        newGrid[tx][ty].life = 5;
-                    }
-                    newGrid[x][y].life--;
-                    if (newGrid[x][y].life <= 0) newGrid[x][y].color = '#000';
+        for(let x=0; x<cols; x++) for(let y=0; y<rows; y++) {
+            if (grid[x][y].life > 0) {
+                let d = [[0,1],[0,-1],[1,0],[-1,0]][Math.floor(Math.random()*4)];
+                let tx = x + d[0], ty = y + d[1];
+                if (tx >= 0 && tx < cols && ty >= 0 && ty < rows && newGrid[tx][ty].life === 0) {
+                    newGrid[tx][ty].color = grid[x][y].color;
+                    newGrid[tx][ty].life = 5;
                 }
+                newGrid[x][y].life--;
+                if (newGrid[x][y].life <= 0) newGrid[x][y].color = '#000';
             }
         }
         grid = newGrid;
@@ -92,24 +72,28 @@
             for (let i = 0; i < cols; i++) { grid[i][y].color = '#000'; grid[i][y].life = 0; }
             for (let i = 0; i < rows; i++) { grid[x][i].color = '#000'; grid[x][i].life = 0; }
         }
-        if (!grid.some(col => col.some(cell => cell.color === '#000'))) isGameOver = true;
-        updateStats();
-        draw();
+        if (!grid.some(c => c.some(cell => cell.color === '#000'))) isGameOver = true;
+        updateStats(); draw();
     }
 
-    window.addEventListener('keydown', (e) => {
-        if (e.key === ' ') autoPlay = !autoPlay;
-        else if (!autoPlay) {
-            let dx=0, dy=0;
-            if(e.key === 'ArrowUp') dy = -1; else if(e.key === 'ArrowDown') dy = 1;
-            else if(e.key === 'ArrowLeft') dx = -1; else if(e.key === 'ArrowRight') dx = 1;
-            else return;
-            player.x = Math.max(0, Math.min(cols-1, player.x + dx));
-            player.y = Math.max(0, Math.min(rows-1, player.y + dy));
-            step();
-        }
-    });
-    setInterval(() => { if(autoPlay) step(); }, 100);
+    function handleDir(dx, dy) {
+        if (autoPlay) toggleAuto();
+        player.x = Math.max(0, Math.min(cols-1, player.x + dx));
+        player.y = Math.max(0, Math.min(rows-1, player.y + dy));
+        step();
+    }
+
+    function toggleAuto() {
+        autoPlay = !autoPlay;
+        document.getElementById('btn-auto').style.background = autoPlay ? '#e44' : '#444';
+    }
+
+    setInterval(() => { if(autoPlay) { 
+        let d = [[0,1],[0,-1],[1,0],[-1,0]][Math.floor(Math.random()*4)];
+        player.x = Math.max(0, Math.min(cols-1, player.x + d[0]));
+        player.y = Math.max(0, Math.min(rows-1, player.y + d[1]));
+        step(); 
+    }}, 100);
     draw(); updateStats();
 </script>
 </body>
